@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollText, Search, Download, ShieldAlert, Lock } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import { Button, Card, Modal, Tag, useUi } from '../../components/ui';
-import { useDb } from '../../data/db';
+import { db, useDb } from '../../data/db';
 import { MODULES } from '../../config/modules';
 
 export const ACCIONES = {
@@ -79,6 +79,9 @@ export default function Auditorias() {
     setLimite(100);
   };
   const hayFiltros = q || usuario || modulo || accion || desde || hasta;
+  useEffect(() => {
+    if (sel) db.ensureCambios(sel.id);
+  }, [sel]);
   const cambios = useDb((d) => (sel ? d.list('auditoria_logs_cambios', (c) => c.log_id === sel.id) : []), [sel?.id]);
 
   return (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LogOut, Moon, Sun, RotateCcw, ArrowLeft } from 'lucide-react';
+import { LogOut, Moon, Sun, RotateCcw, ArrowLeft, Cloud, CloudUpload } from 'lucide-react';
 import ModuleWheel from './ModuleWheel';
 import EmpresaSwitcher from './EmpresaSwitcher';
 import GlobalSearch from './GlobalSearch';
@@ -8,16 +8,23 @@ import NetworkBackground from './NetworkBackground';
 import { useAuth } from '../auth/AuthContext';
 import { MODULES } from '../config/modules';
 import { BRAND } from '../config/brand';
-import { db } from '../data/db';
+import { db, useDb } from '../data/db';
 import { useTheme } from '../hooks/useTheme';
 import { IconButton, useUi } from './ui';
 
 export default function Layout() {
-  const { user, role, isAdmin, logout, empresa } = useAuth();
+  const { user, role, isAdmin, logout, empresa, remote } = useAuth();
   const { confirm, toast } = useUi();
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const [theme, toggleTheme] = useTheme();
+  const syncing = useDb((d) => d.isSyncing());
+
+  // Si el servidor rechaza un cambio (permisos, datos inválidos, sin conexión) se avisa al usuario.
+  useEffect(() => {
+    db.setSyncHandler((mensaje) => toast(mensaje, 'critical'));
+    return () => db.setSyncHandler(null);
+  }, [toast]);
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Atajos del buscador: Ctrl/Cmd + K, o "/" cuando no se está escribiendo en un campo.
@@ -79,7 +86,13 @@ export default function Layout() {
             )}
           </div>
           <div className="topbar-right">
-            {isAdmin && <IconButton icon={RotateCcw} label="Restaurar datos DEMO" onClick={resetDemo} />}
+            {remote && (
+              <span className={`sync-chip ${syncing ? 'busy' : ''}`} role="status" title={syncing ? 'Enviando cambios al servidor…' : 'Todos los cambios están guardados'}>
+                {syncing ? <CloudUpload size={15} aria-hidden /> : <Cloud size={15} aria-hidden />}
+                <span>{syncing ? 'Guardando…' : 'Guardado'}</span>
+              </span>
+            )}
+            {isAdmin && !remote && <IconButton icon={RotateCcw} label="Restaurar datos DEMO" onClick={resetDemo} />}
             <IconButton icon={theme === 'dark' ? Sun : Moon} label={theme === 'dark' ? 'Tema claro' : 'Tema oscuro'} onClick={toggleTheme} />
             <div className="user-chip">
               <span className="avatar">{initials}</span>

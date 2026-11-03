@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Lock, Search, UserCog, LogOut } from 'lucide-react';
+import { KeyRound, Lock, Search, UserCog, LogOut } from 'lucide-react';
 import { LogoMark } from './Logo';
 import { MODULES } from '../config/modules';
 import { useAuth } from '../auth/AuthContext';
+import { FormModal, useUi } from './ui';
 
 // El buscador (lupa) está FIJO en la cima del arco. Debajo, los módulos forman un anillo: al acercar el
 // mouse al borde superior o inferior del menú la rueda gira y los módulos "dan la vuelta":
@@ -26,7 +27,9 @@ const mod = (n, m) => ((n % m) + m) % m;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export default function ModuleWheel({ onSearch, searchOpen }) {
-  const { can, user, role, logout } = useAuth();
+  const { can, user, role, logout, remote, cambiarContrasena } = useAuth();
+  const { toast } = useUi();
+  const [cambiandoClave, setCambiandoClave] = useState(false);
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [height, setHeight] = useState(700);
@@ -206,12 +209,36 @@ export default function ModuleWheel({ onSearch, searchOpen }) {
                 <UserCog size={15} /> Gestión de usuarios
               </button>
             )}
+            {remote && (
+              <button role="menuitem" onClick={() => { setProfile(false); setCambiandoClave(true); }}>
+                <KeyRound size={15} /> Cambiar contraseña
+              </button>
+            )}
             <button role="menuitem" onClick={logout}>
               <LogOut size={15} /> Cerrar sesión
             </button>
           </div>
         )}
       </div>
+
+      {cambiandoClave && (
+        <FormModal
+          title="Cambiar contraseña"
+          submitLabel="Cambiar"
+          fields={[
+            { key: 'nueva', label: 'Nueva contraseña (mínimo 10 caracteres)', type: 'password', required: true, span: 3 },
+            { key: 'confirmar', label: 'Confirmar nueva contraseña', type: 'password', required: true, span: 3 },
+          ]}
+          onClose={() => setCambiandoClave(false)}
+          onSubmit={async (d) => {
+            if (d.nueva !== d.confirmar) return toast('Las contraseñas no coinciden.', 'critical');
+            const err = await cambiarContrasena(d.nueva);
+            if (err) return toast(err, 'critical');
+            setCambiandoClave(false);
+            toast('Contraseña actualizada');
+          }}
+        />
+      )}
 
       {/* Navegación compacta para pantallas pequeñas */}
       <div className="dock">

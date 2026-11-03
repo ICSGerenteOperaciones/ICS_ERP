@@ -7,7 +7,7 @@ import { LayoutDashboard, ShoppingCart, PenTool, ListChecks, Users2, Workflow, T
 import { useDb } from '../../data/db';
 import { useAuth } from '../../auth/AuthContext';
 import { DASHBOARDS } from '../../config/modules';
-import { compraTotales, avanceActividad, terceroName, stockMap, movimientoValor } from '../../data/lookups';
+import { compraTotales, avanceActividad, terceroName, stockMap, movimientoValor, monthOf } from '../../data/lookups';
 import { WORKFLOWS } from '../../workflow/definitions';
 import { Card, Empty, fmtCompact, fmtDate, fmtDateTime, fmtMoney, Progress, StatusBadge, Tag } from '../../components/ui';
 import { PendingList } from '../../components/WorkflowPanels';
@@ -100,7 +100,7 @@ function ComprasWidget() {
     const porProv = {};
     vivas.forEach((c) => {
       const t = compraTotales(c.id).total;
-      const mi = new Date(c.fecha).getMonth();
+      const mi = monthOf(c.fecha);
       if (mensual[mi]) mensual[mi].valor += t;
       porProv[c.proveedor_id] = (porProv[c.proveedor_id] || 0) + t;
     });
@@ -332,7 +332,7 @@ function InventarioWidget() {
     const porMes = MESES.slice(0, 10).map((mes) => ({ mes, entradas: 0, salidas: 0 }));
     const totales = { entradas: 0, salidas: 0 };
     d.list('inventario', (m) => m.estado === 'CONFIRMADO').forEach((m) => {
-      const i = new Date(m.fecha).getUTCMonth();
+      const i = monthOf(m.fecha);
       const v = movimientoValor(m.id);
       if (m.tipo === 'Salida') {
         if (porMes[i]) porMes[i].salidas += v;

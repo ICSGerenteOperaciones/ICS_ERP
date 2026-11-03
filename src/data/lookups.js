@@ -26,6 +26,9 @@ export function avanceActividad(actId) {
   return t.length ? (t.filter((x) => x.completada).length / t.length) * 100 : 0;
 }
 
+/** Mes (0–11) de una fecha pura "AAAA-MM-DD" o ISO, sin depender de la zona horaria. */
+export const monthOf = (v) => parseInt(String(v).slice(5, 7), 10) - 1;
+
 // ---------- Inventario ----------
 /** Efecto de una línea sobre el stock: entradas suman, salidas restan, ajustes llevan su propio signo. */
 export const signedQty = (tipo, cantidad) => (tipo === 'Salida' ? -1 : 1) * (Number(cantidad) || 0);

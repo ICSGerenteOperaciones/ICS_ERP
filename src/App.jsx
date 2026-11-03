@@ -3,6 +3,7 @@ import { ShieldAlert } from 'lucide-react';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { UiProvider, Empty } from './components/ui';
 import Layout from './components/Layout';
+import { LogoMark } from './components/Logo';
 import Login from './pages/Login';
 import Dashboard from './modules/dashboard/Dashboard';
 import Compras from './modules/compras/Compras';
@@ -45,7 +46,15 @@ function Guard({ module }) {
 }
 
 function AppRoutes() {
-  const { user } = useAuth();
+  const { user, booting } = useAuth();
+  if (booting) {
+    return (
+      <div className="boot" role="status" aria-live="polite">
+        <LogoMark size={72} />
+        <p>Cargando Insight Cloud Solution…</p>
+      </div>
+    );
+  }
   if (!user) {
     return (
       <Routes>

@@ -40,7 +40,32 @@ ERP de **ICS – Innovation Code Services**, construido en React + Vite y listo 
 - Cada lista tiene vista **Tabla** y vista **Flujo** (Kanban: arrastrar una tarjeta a otra columna ejecuta la transición si el flujo y los permisos lo permiten).
 - Tema oscuro y claro; los colores corporativos están en `src/styles/theme.css` y `src/config/brand.js`.
 
-## Usuarios DEMO
+## Base de datos conectada (Supabase)
+
+La aplicación trabaja por defecto contra el proyecto **ICS_ERP** de Supabase (PostgreSQL):
+
+- **Acceso con Supabase Auth** (correo y contraseña). Las contraseñas nunca se guardan en las tablas del ERP.
+  El administrador inicial es `desarrollador1@icscode.com.co`; desde el panel de usuario (esquina inferior del menú)
+  puede **cambiar su contraseña**. Los demás usuarios se crean desde el módulo *Usuarios* (contraseña mínima de 10 caracteres).
+- **Seguridad en la base de datos (RLS).** Aunque alguien se salte la interfaz, PostgreSQL impide leer o escribir datos de
+  una empresa a la que el usuario no pertenece y hace cumplir la matriz de permisos CRUD de cada rol. La auditoría es de
+  solo inserción: ni siquiera el administrador puede modificarla o borrarla. Pruébelo con `npm run probar:seguridad`.
+- **Usuarios por función segura.** Crear usuarios, cambiar contraseñas ajenas y eliminar cuentas requieren privilegios de
+  servidor, por lo que corren en la función `admin-usuarios` (`supabase/functions/admin-usuarios`), que verifica quién llama.
+- **Numeración consecutiva por empresa en el servidor**: si dos usuarios crean una orden a la vez, la base asigna el siguiente
+  código y evita duplicados.
+- **Sincronización.** La interfaz mantiene una copia en memoria (rápida) y envía cada cambio al servidor en orden; si el
+  servidor lo rechaza (permisos, datos inválidos, sin conexión) se avisa y la pantalla se resincroniza. Un indicador
+  *Guardado / Guardando…* en la barra superior muestra el estado, y cada minuto se vuelven a leer los cambios de otros usuarios.
+- **Esquema**: `db/migrations/` (se aplica en orden). **Datos de demostración** (3 empresas con terceros, compras, inventario,
+  firmas y actividades): `ADMIN_EMAIL=… ADMIN_PASSWORD=… npm run seed:supabase` (se detiene si la base ya tiene empresas).
+  La carga no incluye usuarios ni auditoría.
+- Variables opcionales (ver `.env.example`): `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (la clave *publishable* es pública por diseño).
+
+**Modo demostración sin base de datos:** `VITE_BACKEND=local npm run dev` guarda todo en el navegador y usa los usuarios
+de abajo (el botón ↺ restaura los datos de ejemplo).
+
+## Usuarios del modo demostración
 
 | Usuario | Contraseña | Rol |
 |---|---|---|
@@ -50,7 +75,6 @@ ERP de **ICS – Innovation Code Services**, construido en React + Vite y listo 
 | `amejia` | `Demo2026*` | Líder de proyectos |
 | `rvargas` | `Demo2026*` | Auditor interno |
 
-El botón ↺ de la barra superior (solo administrador) restaura los datos de demostración.
 
 ## Ejecutar en local
 
@@ -76,18 +100,18 @@ src/
   auth/          AuthContext.jsx (sesión, can(modulo, accion), dashboards del usuario)
   components/    ModuleWheel, MasterDetailPage (motor genérico maestro-detalle), WorkflowPanels, DataTable, SignaturePad, ui
   modules/       compras, firmas, actividades, terceros, seguridad, dashboard
-db/schema.sql    Esquema PostgreSQL de referencia para el backend productivo
+db/migrations/  Esquema PostgreSQL (Supabase): tablas, RLS, funciones y triggers
+  supabase/       Función segura admin-usuarios (Edge Function)
+  scripts/        seed-supabase (datos demo) y probar-seguridad (pruebas de RLS)
 ```
 
 Cada módulo de gestión es una **configuración** (campos del maestro, tablas detalle, columnas, KPIs)
 que interpreta `MasterDetailPage`; añadir un módulo nuevo consiste en declarar su configuración y su workflow.
 
-## Importante: alcance del DEMO
+## Pendientes recomendados para producción
 
-Esta versión guarda los datos en el `localStorage` del navegador y valida la contraseña en el cliente.
-Es adecuada para demostraciones, **no para producción**. Para producción:
-
-- Implementar la API (p. ej. funciones serverless de Vercel) sobre PostgreSQL con `db/schema.sql`
-  y sustituir la implementación de `src/data/db.js` por llamadas a esa API.
-- Autenticación en el servidor con contraseñas cifradas (bcrypt/argon2) y tokens (JWT/sesiones),
-  y verificación de permisos también en el servidor.
+- Activar en Supabase la **protección contra contraseñas filtradas** (Authentication → Policies) y, si lo desea, MFA para administradores.
+- La auditoría se registra desde la aplicación (inmutable y atada al usuario autenticado). Para una trazabilidad que no dependa
+  del cliente, se pueden añadir *triggers* de PostgreSQL que escriban en `auditoria_logs`.
+- Con mucho volumen de datos, cargar por empresa en lugar de todas las accesibles, y paginar el listado de auditoría.
+- Copias de seguridad y entornos: usar una rama/proyecto de pruebas distinto del de producción.

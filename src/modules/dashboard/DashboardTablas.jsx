@@ -2,7 +2,7 @@ import { useDb } from '../../data/db';
 import DataTable from '../../components/DataTable';
 import { Card, Progress, StatusBadge, Tag, fmtDate, fmtDateTime, fmtMoney } from '../../components/ui';
 import { WORKFLOWS } from '../../workflow/definitions';
-import { avanceActividad, compraTotales, movimientoValor, stockMap, terceroName } from '../../data/lookups';
+import { avanceActividad, compraTotales, movimientoValor, stockMap, terceroName, monthOf } from '../../data/lookups';
 
 // Vista "Tabla" del dashboard: los mismos indicadores que los gráficos, en tablas ordenables.
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -39,7 +39,7 @@ const BUILDERS = {
     const prov = {};
     vivas.forEach((c) => {
       const t = compraTotales(c.id).total;
-      const mi = new Date(c.fecha).getMonth();
+      const mi = monthOf(c.fecha);
       if (meses[mi]) {
         meses[mi].ordenes += 1;
         meses[mi].valor += t;
@@ -113,7 +113,7 @@ const BUILDERS = {
     });
     const meses = MESES.slice(0, 10).map((mes, i) => ({ id: mes, mes, entradas: 0, salidas: 0, i }));
     d.list('inventario', (m) => m.estado === 'CONFIRMADO').forEach((m) => {
-      const x = meses[new Date(m.fecha).getUTCMonth()];
+      const x = meses[monthOf(m.fecha)];
       if (!x) return;
       if (m.tipo === 'Salida') x.salidas += movimientoValor(m.id);
       else if (m.tipo !== 'Ajuste') x.entradas += movimientoValor(m.id);

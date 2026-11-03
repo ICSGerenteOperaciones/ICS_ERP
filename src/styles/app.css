@@ -2628,3 +2628,61 @@ kbd {
   border-color: var(--lg-accent);
   transform: rotate(18deg);
 }
+
+/* ---------- Conexión con el servidor ---------- */
+.boot {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  color: var(--text-2);
+  background: var(--bg);
+}
+.boot svg {
+  animation: lg-float 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 18px rgba(34, 200, 240, 0.5));
+}
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.lg-btn:disabled {
+  opacity: 0.75;
+  cursor: progress;
+}
+.sync-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--tone-good);
+  transition: color 0.2s, border-color 0.2s;
+}
+.sync-chip.busy {
+  color: var(--tone-info);
+  border-color: var(--border-strong);
+}
+.sync-chip.busy svg {
+  animation: pulse-op 1s ease-in-out infinite;
+}
+@keyframes pulse-op {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (max-width: 760px) {
+  .sync-chip span {
+    display: none;
+  }
+}

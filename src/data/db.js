@@ -1,7 +1,8 @@
-// Repositorio de datos del DEMO.
-// Persiste en localStorage con una API CRUD síncrona; para producción basta con
-// reemplazar la implementación de estas funciones por llamadas a la API real
-// (p. ej. funciones serverless de Vercel sobre PostgreSQL) sin tocar la UI.
+// Repositorio de datos.
+// La interfaz usa una API CRUD síncrona sobre una copia en memoria. Hay dos modos:
+//   · Conectado (por defecto): la copia se carga desde Supabase al iniciar sesión y cada cambio se
+//     envía al servidor en orden (cola de escritura). La seguridad la imponen Supabase Auth y RLS.
+//   · Demostración (VITE_BACKEND=local): los datos viven en el localStorage del navegador.
 //
 // AUDITORÍA: toda creación, edición y eliminación pasa por aquí y queda registrada
 // automáticamente en `auditoria_logs` (evento) + `auditoria_logs_cambios` (campo a campo).
@@ -9,9 +10,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { SCHEMA, TABLES, SCOPED_TABLES, GLOBAL_TABLES } from './schema';
 import { WORKFLOWS } from '../workflow/definitions';
 import { buildSeed, EMPRESA_PRINCIPAL } from './seed';
+import { REMOTE } from '../lib/supabase';
+import { applyOp, fetchAll, fetchCambios, friendlyError } from './remote';
 
 const STORAGE_KEY = 'ics-erp-db-v1';
 const MAX_LOGS = 1500; // el DEMO conserva los eventos más recientes
+const emptyState = () => Object.fromEntries(TABLES.map((t) => [t, []]));
 const listeners = new Set();
 // MULTIEMPRESA: empresa activa de la sesión. Los datos de negocio (SCOPED_TABLES) solo se
 // leen/escriben dentro de ella; el repositorio aplica el filtro para que ninguna pantalla
@@ -26,6 +30,7 @@ const visibleRow = (table, row) => {
 };
 
 function load() {
+  if (REMOTE) return emptyState();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -62,13 +67,65 @@ function load() {
   return buildSeed();
 }
 
+const notify = () => listeners.forEach((fn) => fn());
+
 function persist() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    /* sin persistencia en este navegador */
+  if (!REMOTE) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      /* sin persistencia en este navegador */
+    }
   }
-  listeners.forEach((fn) => fn());
+  notify();
+}
+
+// ======================= SINCRONIZACIÓN CON EL SERVIDOR =======================
+// Las operaciones se envían una a una y en orden (un maestro siempre antes que sus detalles).
+// Si el servidor rechaza una, se descartan las pendientes, se avisa una sola vez y se recarga
+// la copia local desde el servidor para que la pantalla refleje la realidad.
+const queue = [];
+let flushing = false;
+let canSync = false; // solo con sesión iniciada y datos cargados
+let syncHandler = null;
+const loadedCambios = new Set(); // eventos de auditoría cuyo detalle ya está en memoria
+let refreshing = false;
+
+function enqueue(op) {
+  if (!REMOTE || !canSync) return;
+  queue.push(op);
+  flush();
+}
+
+async function flush() {
+  if (flushing) return;
+  flushing = true;
+  notify();
+  let failed = null;
+  let needsRefresh = false;
+  while (queue.length) {
+    const op = queue.shift();
+    try {
+      await applyOp(op);
+      if (op.refresh) needsRefresh = true;
+    } catch (e) {
+      failed = e;
+      queue.length = 0;
+    }
+  }
+  flushing = false;
+  if (failed) syncHandler?.(friendlyError(failed), failed);
+  notify();
+  if (failed || needsRefresh) await db.refresh({ force: true });
+}
+
+if (REMOTE && typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', (e) => {
+    if (flushing || queue.length) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
 }
 
 export const uid = () =>
@@ -166,6 +223,9 @@ function addLog(entry, cambios = []) {
     rows = rows.filter((r) => !drop.has(r.log_id));
   }
   state = { ...state, auditoria_logs: logs, auditoria_logs_cambios: rows };
+  loadedCambios.add(log.id);
+  enqueue({ type: 'insert', table: 'auditoria_logs', row: log });
+  if (cambios.length) enqueue({ type: 'insertMany', table: 'auditoria_logs_cambios', rows: rows.filter((r) => r.log_id === log.id) });
 }
 
 export const db = {
@@ -198,7 +258,15 @@ export const db = {
     const row = { id: uid(), creado: now(), actualizado: now(), ...data };
     if (SCOPED_TABLES.has(table) && row.empresa_id === undefined) row.empresa_id = activeEmpresa;
     if (!row.codigo && SCHEMA[table]?.prefix) row.codigo = nextCode(table);
+    // En modo conectado la contraseña nunca queda en memoria: viaja una sola vez a la función segura.
+    const password = REMOTE && table === 'usuarios' ? row.clave : undefined;
+    if (REMOTE && table === 'usuarios') delete row.clave;
     state = { ...state, [table]: [...state[table], row] };
+    if (REMOTE && table === 'usuarios') {
+      enqueue({ type: 'fn', refresh: true, body: { action: 'create', password, user: { ...row, id: undefined } } });
+    } else {
+      enqueue({ type: 'insert', table, row });
+    }
     if (!NO_LOG.has(table)) {
       const label = recordLabel(table, row);
       addLog(
@@ -213,10 +281,19 @@ export const db = {
   update(table, id, patch) {
     const before = state[table].find((r) => r.id === id);
     let updated = null;
+    const password = REMOTE && table === 'usuarios' ? patch.clave : undefined;
+    const statePatch = REMOTE && table === 'usuarios' ? Object.fromEntries(Object.entries(patch).filter(([k]) => k !== 'clave')) : patch;
     state = {
       ...state,
-      [table]: state[table].map((r) => (r.id === id ? (updated = { ...r, ...patch, actualizado: now() }) : r)),
+      [table]: state[table].map((r) => (r.id === id ? (updated = { ...r, ...statePatch, actualizado: now() }) : r)),
     };
+    if (updated) {
+      enqueue({ type: 'update', table, id, patch: { ...statePatch, actualizado: updated.actualizado } });
+      if (REMOTE && table === 'usuarios') {
+        if ('empresas_ids' in statePatch) enqueue({ type: 'links', usuario_id: id, empresas_ids: statePatch.empresas_ids || [] });
+        if (password) enqueue({ type: 'fn', body: { action: 'set_password', id, password } });
+      }
+    }
     if (before && updated && !NO_LOG.has(table)) {
       const cambios = diff(before, updated);
       if (cambios.length) {
@@ -251,6 +328,9 @@ export const db = {
     });
     next.workflow_historial = next.workflow_historial.filter((h) => h.registro_id !== id);
     state = next;
+    // El servidor borra los detalles y el historial en cascada.
+    if (REMOTE && table === 'usuarios') enqueue({ type: 'fn', refresh: true, body: { action: 'delete', id } });
+    else enqueue({ type: 'delete', table, id });
     if (row && !NO_LOG.has(table)) {
       addLog(
         {
@@ -280,9 +360,75 @@ export const db = {
     persist();
   },
 
+  /** Restaura los datos de demostración (solo modo demostración). */
   reset() {
+    if (REMOTE) return;
     state = buildSeed();
     persist();
+  },
+
+  /** ¿Se está trabajando contra el servidor? */
+  isRemote: () => REMOTE,
+
+  /** Carga desde el servidor todos los datos accesibles para el usuario con sesión iniciada. */
+  async hydrate() {
+    state = await fetchAll();
+    loadedCambios.clear();
+    canSync = true;
+    notify();
+  },
+
+  /** Vuelve a leer el servidor (cambios de otros usuarios). Se omite si hay escrituras pendientes. */
+  async refresh({ force = false } = {}) {
+    if (!REMOTE || !canSync || refreshing || (!force && (flushing || queue.length))) return;
+    refreshing = true;
+    try {
+      state = await fetchAll();
+      loadedCambios.clear();
+      notify();
+    } catch (e) {
+      syncHandler?.(friendlyError(e), e);
+    } finally {
+      refreshing = false;
+    }
+  },
+
+  /** Al cerrar sesión: se vacía la copia local y se detiene la sincronización. */
+  clear() {
+    canSync = false;
+    queue.length = 0;
+    state = emptyState();
+    loadedCambios.clear();
+    notify();
+  },
+
+  /** Trae el detalle (campo a campo) de un evento de auditoría la primera vez que se abre. */
+  async ensureCambios(logId) {
+    if (!REMOTE || !canSync || loadedCambios.has(logId)) return;
+    loadedCambios.add(logId);
+    try {
+      const rows = await fetchCambios(logId);
+      state = { ...state, auditoria_logs_cambios: [...state.auditoria_logs_cambios.filter((c) => c.log_id !== logId), ...rows] };
+      notify();
+    } catch {
+      loadedCambios.delete(logId);
+    }
+  },
+
+  /** Espera a que se envíen todos los cambios pendientes al servidor. */
+  whenIdle() {
+    return new Promise((resolve) => {
+      const check = () => (!flushing && !queue.length ? resolve() : setTimeout(check, 40));
+      check();
+    });
+  },
+
+  /** ¿Hay cambios pendientes de enviar al servidor? */
+  isSyncing: () => flushing || queue.length > 0,
+
+  /** Función que se invoca (una vez por fallo) con el mensaje de error de sincronización. */
+  setSyncHandler(fn) {
+    syncHandler = fn;
   },
 
   subscribe(fn) {

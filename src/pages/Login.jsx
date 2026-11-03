@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, KeyRound, Moon, Sun, User } from 'lucide-react';
+import { ArrowRight, KeyRound, Loader2, Mail, Moon, Sun, User } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { LogoMark } from '../components/Logo';
 import NetworkBackground from '../components/NetworkBackground';
@@ -11,12 +11,13 @@ import { useTheme } from '../hooks/useTheme';
 const WORDS = ['Compras', 'Inventario', 'Firmas', 'Actividades', 'Auditoría', 'Multiempresa'];
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, remote } = useAuth();
   const navigate = useNavigate();
   const [usuario, setUsuario] = useState('');
   const [clave, setClave] = useState('');
   const [error, setError] = useState('');
   const [w, setW] = useState(0);
+  const [busy, setBusy] = useState(false);
   const [theme, toggleTheme] = useTheme();
 
   useEffect(() => {
@@ -24,9 +25,13 @@ export default function Login() {
     return () => clearInterval(id);
   }, []);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    const err = login(usuario, clave);
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    const err = await login(usuario, clave);
+    setBusy(false);
     if (err) setError(err);
     else navigate('/dashboard', { replace: true });
   };
@@ -75,12 +80,13 @@ export default function Login() {
 
         <form className="lg-form" onSubmit={submit}>
           <label className="lg-field">
-            <User size={17} aria-hidden />
+            {remote ? <Mail size={17} aria-hidden /> : <User size={17} aria-hidden />}
             <input
-              placeholder="Usuario"
+              type={remote ? 'email' : 'text'}
+              placeholder={remote ? 'Correo electrónico' : 'Usuario'}
               value={usuario}
               onChange={(e) => setUsuario(e.target.value)}
-              autoComplete="username"
+              autoComplete={remote ? 'email' : 'username'}
               aria-label="Usuario"
               autoFocus
             />
@@ -101,15 +107,18 @@ export default function Login() {
               {error}
             </p>
           )}
-          <button className="lg-btn" type="submit">
-            <span>Ingresar</span>
-            <ArrowRight size={18} aria-hidden />
+          <button className="lg-btn" type="submit" disabled={busy}>
+            {busy ? <Loader2 size={18} className="spin" aria-hidden /> : null}
+            <span>{busy ? 'Ingresando…' : 'Ingresar'}</span>
+            {!busy && <ArrowRight size={18} aria-hidden />}
           </button>
         </form>
 
-        <button type="button" className="lg-demo" onClick={fillDemo}>
-          Cuenta DEMO · <code>admin</code> / <code>Ics2026*</code> <span>autocompletar</span>
-        </button>
+        {!remote && (
+          <button type="button" className="lg-demo" onClick={fillDemo}>
+            Cuenta DEMO · <code>admin</code> / <code>Ics2026*</code> <span>autocompletar</span>
+          </button>
+        )}
       </main>
 
       <footer className="lg-foot">

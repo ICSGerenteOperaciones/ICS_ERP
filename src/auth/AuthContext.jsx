@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { db, useDb } from '../data/db';
 import { DASHBOARDS } from '../config/modules';
+import { REMOTE, supabase } from '../lib/supabase';
 
 const AuthContext = createContext(null);
 const SESSION_KEY = 'ics-erp-session';
 const EMPRESA_KEY = 'ics-erp-empresa';
+const REFRESH_MS = 60_000; // en modo conectado se vuelve a leer el servidor cada minuto (cambios de otros usuarios)
 
 function readStorage(key) {
   try {
@@ -31,10 +33,12 @@ function empresasPermitidas(user) {
 }
 
 export function AuthProvider({ children }) {
-  const [userId, setUserId] = useState(() => readStorage(SESSION_KEY));
+  // En modo demostración el usuario sale de la sesión del navegador; en modo conectado, de Supabase Auth.
+  const [userId, setUserId] = useState(() => (REMOTE ? null : readStorage(SESSION_KEY)));
+  const [booting, setBooting] = useState(REMOTE); // comprobando si ya hay una sesión de Supabase abierta
   // La empresa activa debe fijarse ANTES del primer render para no mostrar datos de otra empresa.
   const [empresaId, setEmpresaId] = useState(() => {
-    const saved = readStorage(EMPRESA_KEY);
+    const saved = REMOTE ? null : readStorage(EMPRESA_KEY);
     db.setEmpresa(saved, { silent: true });
     return saved;
   });
@@ -67,35 +71,127 @@ export function AuthProvider({ children }) {
     }
   }, [user, empresa, empresas]);
 
-  // NOTA DEMO: la validación de clave ocurre en el cliente. En producción debe
-  // hacerse en el backend con contraseñas cifradas (bcrypt/argon2) y JWT.
-  const login = useCallback((usuario, clave) => {
-    const u = db.list('usuarios').find((x) => x.usuario.toLowerCase() === usuario.trim().toLowerCase());
-    if (!u || u.clave !== clave) {
-      const typed = usuario.trim();
-      db.logEvent('LOGIN_FALLIDO', `Intento de ingreso fallido con el usuario "${typed || '(vacío)'}"`, {
-        who: { id: u?.id || '', nombre: u?.nombre || typed || '(desconocido)', usuario: typed, rol: '—' },
-        nivel: 'critical',
-      });
-      return 'Usuario o contraseña incorrectos.';
+  /** Modo conectado: carga los datos del servidor y deja lista la sesión. Devuelve un mensaje de error o null. */
+  const openRemoteSession = useCallback(async (authUserId, { logLogin = false } = {}) => {
+    await db.hydrate();
+    const u = db.get('usuarios', authUserId);
+    if (!u || !u.activo) {
+      await supabase.auth.signOut();
+      db.clear();
+      return !u ? 'Su cuenta no tiene un perfil en el sistema. Contacte al administrador.' : 'El usuario está inactivo.';
     }
-    if (!u.activo) return 'El usuario está inactivo.';
     const permitidas = empresasPermitidas(u);
-    if (!permitidas.length) return 'El usuario no tiene empresas asignadas. Contacte al administrador.';
-    const inicial = permitidas.find((e) => e.id === u.empresa_id) || permitidas[0];
+    if (!permitidas.length) {
+      await supabase.auth.signOut();
+      db.clear();
+      return 'El usuario no tiene empresas asignadas. Contacte al administrador.';
+    }
+    const guardada = readStorage(EMPRESA_KEY);
+    const inicial = permitidas.find((e) => e.id === guardada) || permitidas.find((e) => e.id === u.empresa_id) || permitidas[0];
     db.setEmpresa(inicial.id, { silent: true });
-    db.logEvent('LOGIN', `Inició sesión en ${inicial.alias || inicial.nombre}`, {
-      who: { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: db.get('roles', u.rol_id)?.nombre || '—' },
-    });
-    writeStorage(SESSION_KEY, u.id);
     writeStorage(EMPRESA_KEY, inicial.id);
     setEmpresaId(inicial.id);
     setUserId(u.id);
+    if (logLogin) {
+      db.logEvent('LOGIN', `Inició sesión en ${inicial.alias || inicial.nombre}`, {
+        who: { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: db.get('roles', u.rol_id)?.nombre || '—' },
+      });
+    }
     return null;
   }, []);
 
-  const logout = useCallback(() => {
+  // Al abrir la aplicación: si Supabase ya tiene una sesión guardada, se retoma sin pedir la contraseña.
+  useEffect(() => {
+    if (!REMOTE) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) await openRemoteSession(data.session.user.id);
+      } catch {
+        /* sin conexión: se mostrará la pantalla de ingreso */
+      } finally {
+        if (!cancelled) setBooting(false);
+      }
+    })();
+    // La sesión puede terminar por expiración o porque se cerró en otra pestaña.
+    const { data: sub } = supabase.auth.onAuthStateChange((evento) => {
+      if (evento === 'SIGNED_OUT') {
+        db.clear();
+        writeStorage(EMPRESA_KEY, null);
+        db.setEmpresa(null, { silent: true });
+        setEmpresaId(null);
+        setUserId(null);
+      }
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, [openRemoteSession]);
+
+  // Mantiene la copia local al día con los cambios de otros usuarios.
+  useEffect(() => {
+    if (!REMOTE || !userId) return undefined;
+    const tick = () => !document.hidden && db.refresh();
+    const timer = setInterval(tick, REFRESH_MS);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [userId]);
+
+  // NOTA (modo demostración): la clave se valida en el navegador. En modo conectado la valida Supabase Auth.
+  const login = useCallback(
+    async (usuario, clave) => {
+      if (REMOTE) {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: usuario.trim(), password: clave });
+        if (error) {
+          return /invalid|credentials/i.test(error.message) ? 'Correo o contraseña incorrectos.' : error.message;
+        }
+        try {
+          return await openRemoteSession(data.user.id, { logLogin: true });
+        } catch (e) {
+          await supabase.auth.signOut();
+          db.clear();
+          return `No se pudieron cargar los datos: ${e.message}`;
+        }
+      }
+
+      const u = db.list('usuarios').find((x) => x.usuario.toLowerCase() === usuario.trim().toLowerCase());
+      if (!u || u.clave !== clave) {
+        const typed = usuario.trim();
+        db.logEvent('LOGIN_FALLIDO', `Intento de ingreso fallido con el usuario "${typed || '(vacío)'}"`, {
+          who: { id: u?.id || '', nombre: u?.nombre || typed || '(desconocido)', usuario: typed, rol: '—' },
+          nivel: 'critical',
+        });
+        return 'Usuario o contraseña incorrectos.';
+      }
+      if (!u.activo) return 'El usuario está inactivo.';
+      const permitidas = empresasPermitidas(u);
+      if (!permitidas.length) return 'El usuario no tiene empresas asignadas. Contacte al administrador.';
+      const inicial = permitidas.find((e) => e.id === u.empresa_id) || permitidas[0];
+      db.setEmpresa(inicial.id, { silent: true });
+      db.logEvent('LOGIN', `Inició sesión en ${inicial.alias || inicial.nombre}`, {
+        who: { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: db.get('roles', u.rol_id)?.nombre || '—' },
+      });
+      writeStorage(SESSION_KEY, u.id);
+      writeStorage(EMPRESA_KEY, inicial.id);
+      setEmpresaId(inicial.id);
+      setUserId(u.id);
+      return null;
+    },
+    [openRemoteSession],
+  );
+
+  const logout = useCallback(async () => {
     db.logEvent('LOGOUT', 'Cerró sesión');
+    if (REMOTE) {
+      await db.whenIdle(); // el evento de cierre debe llegar al servidor antes de perder la sesión
+      await supabase.auth.signOut();
+      db.clear();
+    }
     writeStorage(SESSION_KEY, null);
     writeStorage(EMPRESA_KEY, null);
     db.setEmpresa(null, { silent: true });
@@ -117,6 +213,16 @@ export function AuthProvider({ children }) {
     [empresas, empresaId],
   );
 
+  /** Cambia la contraseña de la cuenta actual (solo modo conectado). Devuelve un mensaje de error o null. */
+  const cambiarContrasena = useCallback(async (nueva) => {
+    if (!REMOTE) return 'Disponible solo con la base de datos conectada.';
+    if (!nueva || nueva.length < 10) return 'La contraseña debe tener al menos 10 caracteres.';
+    const { error } = await supabase.auth.updateUser({ password: nueva });
+    if (error) return error.message;
+    db.logEvent('EDITAR', 'Cambió su contraseña', { modulo: 'usuarios' });
+    return null;
+  }, []);
+
   const value = useMemo(() => {
     const isAdmin = role?.id === 'rol-admin';
     const can = (module, action = 'ver') => isAdmin || !!role?.permisos?.[module]?.[action];
@@ -124,8 +230,8 @@ export function AuthProvider({ children }) {
     const dashboards = isAdmin
       ? DASHBOARDS.map((d) => d.key)
       : (user?.dashboards || []).filter((k) => can(DASHBOARDS.find((d) => d.key === k)?.module || 'dashboard'));
-    return { user, role, isAdmin, can, dashboards, login, logout, empresa, empresas, cambiarEmpresa };
-  }, [user, role, login, logout, empresa, empresas, cambiarEmpresa]);
+    return { user, role, isAdmin, can, dashboards, login, logout, empresa, empresas, cambiarEmpresa, cambiarContrasena, booting, remote: REMOTE };
+  }, [user, role, login, logout, empresa, empresas, cambiarEmpresa, cambiarContrasena, booting]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

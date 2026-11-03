@@ -7,7 +7,7 @@ import DataTable from '../../components/DataTable';
 import { Button, Card, FormModal, IconButton, Tag, useUi } from '../../components/ui';
 
 export default function Usuarios() {
-  const { can, user: me } = useAuth();
+  const { can, user: me, remote } = useAuth();
   const { toast, confirm } = useUi();
   const usuarios = useDb((d) => d.list('usuarios'));
   const roles = useDb((d) => d.list('roles'));
@@ -20,11 +20,11 @@ export default function Usuarios() {
   const fields = useMemo(
     () => [
       { key: 'nombre', label: 'Nombre completo', required: true, span: 2 },
-      { key: 'usuario', label: 'Usuario', required: true },
-      { key: 'email', label: 'Correo', type: 'email', required: true, span: 2 },
+      { key: 'usuario', label: remote ? 'Nombre de usuario (alias)' : 'Usuario', required: true },
+      { key: 'email', label: remote ? 'Correo (es su acceso al sistema)' : 'Correo', type: 'email', required: true, span: 2, readOnly: remote && !!form?.row },
       { key: 'cargo', label: 'Cargo' },
       { key: 'rol_id', label: 'Rol', type: 'select', options: roles.map((r) => ({ value: r.id, label: r.nombre })), required: true },
-      { key: 'clave', label: 'Contraseña', type: 'password', required: !form?.row, span: 1 },
+      { key: 'clave', label: remote ? (form?.row ? 'Nueva contraseña (opcional, mín. 10)' : 'Contraseña (mín. 10 caracteres)') : 'Contraseña', type: 'password', required: !form?.row, span: 1 },
       {
         key: 'empresas_ids',
         label: 'Empresas con acceso (el administrador accede a todas)',
@@ -50,7 +50,7 @@ export default function Usuarios() {
         default: ['resumen'],
       },
     ],
-    [roles, empresas, form],
+    [roles, empresas, form, remote],
   );
 
   const rows = usuarios.filter((u) => `${u.nombre} ${u.usuario} ${u.email}`.toLowerCase().includes(q.toLowerCase()));
@@ -65,9 +65,13 @@ export default function Usuarios() {
     if (ids.length && !ids.includes(payload.empresa_id)) payload.empresa_id = ids[0];
     if (!ids.length && !payload.empresa_id) payload.empresa_id = empresas[0]?.id || '';
     if (form.row && !payload.clave) delete payload.clave; // conservar contraseña actual
+    if (remote && payload.clave && payload.clave.length < 10) return toast('La contraseña debe tener al menos 10 caracteres.', 'critical');
+    if (remote && form.row) delete payload.email; // el correo es el acceso: no se cambia desde aquí
+    const cambioClave = !!payload.clave;
     if (form.row) db.update('usuarios', form.row.id, payload);
     else db.insert('usuarios', payload);
-    toast(form.row ? 'Usuario actualizado' : 'Usuario creado');
+    if (remote && form.row && cambioClave) db.logEvent('EDITAR', `Cambió la contraseña de ${data.nombre}`, { modulo: 'usuarios' });
+    toast(form.row ? 'Usuario actualizado' : remote ? 'Creando usuario…' : 'Usuario creado');
     setForm(null);
   };
 
