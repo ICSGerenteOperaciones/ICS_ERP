@@ -13,12 +13,17 @@ import { useTheme } from '../hooks/useTheme';
 import { IconButton, useUi } from './ui';
 
 export default function Layout() {
-  const { user, role, isAdmin, logout, empresa, remote } = useAuth();
+  const { user, role, isAdmin, logout, empresa, empresas, remote } = useAuth();
   const { confirm, toast } = useUi();
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const [theme, toggleTheme] = useTheme();
   const syncing = useDb((d) => d.isSyncing());
+
+  // Instalación nueva: mientras no exista ninguna empresa, el administrador queda en el módulo Empresas.
+  useEffect(() => {
+    if (!empresa && empresas.length === 0 && pathname !== '/empresas') navigate('/empresas', { replace: true });
+  }, [empresa, empresas.length, pathname, navigate]);
 
   // Si el servidor rechaza un cambio (permisos, datos inválidos, sin conexión) se avisa al usuario.
   useEffect(() => {

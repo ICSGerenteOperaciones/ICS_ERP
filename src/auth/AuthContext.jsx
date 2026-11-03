@@ -81,19 +81,20 @@ export function AuthProvider({ children }) {
       return !u ? 'Su cuenta no tiene un perfil en el sistema. Contacte al administrador.' : 'El usuario está inactivo.';
     }
     const permitidas = empresasPermitidas(u);
-    if (!permitidas.length) {
+    // Un administrador puede entrar sin empresas (instalación nueva): se le guía a crear la primera.
+    if (!permitidas.length && u.rol_id !== 'rol-admin') {
       await supabase.auth.signOut();
       db.clear();
       return 'El usuario no tiene empresas asignadas. Contacte al administrador.';
     }
     const guardada = readStorage(EMPRESA_KEY);
     const inicial = permitidas.find((e) => e.id === guardada) || permitidas.find((e) => e.id === u.empresa_id) || permitidas[0];
-    db.setEmpresa(inicial.id, { silent: true });
-    writeStorage(EMPRESA_KEY, inicial.id);
-    setEmpresaId(inicial.id);
+    db.setEmpresa(inicial?.id || null, { silent: true });
+    writeStorage(EMPRESA_KEY, inicial?.id || null);
+    setEmpresaId(inicial?.id || null);
     setUserId(u.id);
     if (logLogin) {
-      db.logEvent('LOGIN', `Inició sesión en ${inicial.alias || inicial.nombre}`, {
+      db.logEvent('LOGIN', inicial ? `Inició sesión en ${inicial.alias || inicial.nombre}` : 'Inició sesión (sin empresas creadas)', {
         who: { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: db.get('roles', u.rol_id)?.nombre || '—' },
       });
     }

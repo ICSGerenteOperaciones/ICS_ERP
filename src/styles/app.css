@@ -2686,3 +2686,7 @@ kbd {
     display: none;
   }
 }
+
+.empresa-vacia {
+  padding-bottom: 28px;
+}

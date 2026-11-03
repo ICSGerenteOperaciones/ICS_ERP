@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Building2, Plus, Pencil, Trash2, LogIn, Users } from 'lucide-react';
 import { db, useDb } from '../../data/db';
 import { useAuth } from '../../auth/AuthContext';
-import { Button, Card, FormModal, IconButton, Tag, fmtCompact, useUi } from '../../components/ui';
+import { Button, Card, Empty, FormModal, IconButton, Tag, fmtCompact, useUi } from '../../components/ui';
 import { EmpresaChip } from '../../components/EmpresaSwitcher';
 
 const COLORES = [
@@ -135,6 +135,21 @@ export default function Empresas() {
           <span className="kpi-hint">los módulos muestran solo sus datos</span>
         </div>
       </div>
+
+      {empresas.length === 0 && (
+        <Card className="empresa-vacia">
+          <Empty icon={Building2} title="Bienvenido: cree su primera empresa para comenzar">
+            Todos los datos del sistema (terceros, compras, inventario, firmas y actividades) pertenecen a una empresa.
+          </Empty>
+          {can('empresas', 'crear') && (
+            <div className="center">
+              <Button icon={Plus} onClick={() => setForm({ row: null })}>
+                Crear mi primera empresa
+              </Button>
+            </div>
+          )}
+        </Card>
+      )}
 
       <div className="empresa-grid">
         {empresas.map((e) => {

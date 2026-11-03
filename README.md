@@ -45,8 +45,9 @@ ERP de **ICS – Innovation Code Services**, construido en React + Vite y listo 
 La aplicación trabaja por defecto contra el proyecto **ICS_ERP** de Supabase (PostgreSQL):
 
 - **Acceso con Supabase Auth** (correo y contraseña). Las contraseñas nunca se guardan en las tablas del ERP.
-  El administrador inicial es `desarrollador1@icscode.com.co`; desde el panel de usuario (esquina inferior del menú)
-  puede **cambiar su contraseña**. Los demás usuarios se crean desde el módulo *Usuarios* (contraseña mínima de 10 caracteres).
+  El administrador inicial es `gerencia.operaciones@icscode.com.co`; desde el panel de usuario (esquina inferior del menú)
+  puede **cambiar su contraseña**. Una instalación nueva arranca **vacía**: al ingresar, el administrador es guiado a crear la
+  primera empresa (`db/mantenimiento/vaciar_para_produccion.sql` deja la base en ese estado). Los demás usuarios se crean desde el módulo *Usuarios* (contraseña mínima de 10 caracteres).
 - **Seguridad en la base de datos (RLS).** Aunque alguien se salte la interfaz, PostgreSQL impide leer o escribir datos de
   una empresa a la que el usuario no pertenece y hace cumplir la matriz de permisos CRUD de cada rol. La auditoría es de
   solo inserción: ni siquiera el administrador puede modificarla o borrarla. Pruébelo con `npm run probar:seguridad`.
