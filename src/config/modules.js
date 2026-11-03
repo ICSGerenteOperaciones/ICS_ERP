@@ -9,6 +9,7 @@ import {
   Building2,
   UserCog,
   ShieldCheck,
+  Workflow,
 } from 'lucide-react';
 
 // Registro único de módulos: alimenta la rueda de navegación, las rutas
@@ -19,6 +20,7 @@ export const MODULES = [
   { key: 'inventario', label: 'Inventario', path: '/inventario', icon: Warehouse, group: 'Gestión' },
   { key: 'firmas', label: 'Firmas', path: '/firmas', icon: PenTool, group: 'Gestión' },
   { key: 'actividades', label: 'Actividades', path: '/actividades', icon: ListChecks, group: 'Gestión' },
+  { key: 'operaciones', label: 'Operaciones', path: '/operaciones', icon: Workflow, group: 'Gestión' },
   { key: 'terceros', label: 'Terceros', path: '/terceros', icon: Users2, group: 'Gestión' },
   { key: 'auditorias', label: 'Auditoría', path: '/auditorias', icon: ScrollText, group: 'Seguridad' },
   { key: 'empresas', label: 'Empresas', path: '/empresas', icon: Building2, group: 'Seguridad' },

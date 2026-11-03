@@ -9,6 +9,7 @@ import Dashboard from './modules/dashboard/Dashboard';
 import Compras from './modules/compras/Compras';
 import Firmas from './modules/firmas/Firmas';
 import Actividades from './modules/actividades/Actividades';
+import Operaciones from './modules/operaciones/Operaciones';
 import Terceros from './modules/terceros/Terceros';
 import Inventario from './modules/inventario/Inventario';
 import Auditorias from './modules/auditorias/Auditorias';
@@ -21,6 +22,7 @@ const PAGES = {
   compras: Compras,
   firmas: Firmas,
   actividades: Actividades,
+  operaciones: Operaciones,
   terceros: Terceros,
   inventario: Inventario,
   auditorias: Auditorias,

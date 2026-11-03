@@ -16,6 +16,7 @@ const KEYWORDS = {
   inventario: 'stock existencias articulos kardex bodega movimientos almacen productos',
   firmas: 'documentos firma firmar contratos actas',
   actividades: 'tareas proyectos tiempos horas pendientes',
+  operaciones: 'sistemas desarrollo qa etapas horas registro innovacion despliegue revision',
   terceros: 'clientes proveedores aliados contactos nit',
   auditorias: 'logs registro eventos historial trazabilidad cambios seguridad',
   empresas: 'multiempresa grupo companias sociedades sucursales',
@@ -52,6 +53,13 @@ const SOURCES = [
     title: (r) => r.titulo,
     sub: (r) => `${r.codigo} · ${r.responsable} · ${stateInfo('actividades', r.estado).label}`,
     path: (r) => `/actividades?id=${r.id}`,
+  },
+  {
+    module: 'operaciones', table: 'ops_sistemas', group: 'Sistemas',
+    text: (r) => `${r.codigo} ${r.nombre} ${r.descripcion} ${r.etapa} ${r.estado}`,
+    title: (r) => r.nombre,
+    sub: (r) => `${r.codigo} · Sistema · ${r.estado.charAt(0)}${r.estado.slice(1).toLowerCase()}`,
+    path: (r) => `/operaciones?id=${r.id}`,
   },
   {
     module: 'inventario', table: 'articulos', group: 'Artículos',

@@ -32,6 +32,9 @@ export const COLUMNS = {
   actividades: def({ s: 'id empresa_id codigo titulo area responsable prioridad descripcion estado', d: 'fecha_inicio fecha_fin', ...AUD }),
   actividades_tareas: def({ s: 'id empresa_id actividad_id titulo responsable', d: 'fecha', n: 'horas_estimadas', b: 'completada', ...AUD }),
   actividades_tiempos: def({ s: 'id empresa_id actividad_id usuario nota', d: 'fecha', n: 'horas', ...AUD }),
+  ops_sistemas: def({ s: 'id empresa_id codigo nombre descripcion prioridad etapa estado observaciones', f: 'desarrollador_id coordinador_id qa_id', d: 'fecha_inicio fecha_entrega', ...AUD }),
+  ops_horas: def({ s: 'id empresa_id sistema_id etapa usuario descripcion', f: 'usuario_id', d: 'fecha', n: 'horas', ...AUD }),
+  ops_revisiones: def({ s: 'id empresa_id sistema_id tipo enviado_por_nombre comentario estado resuelto_por motivo', f: 'enviado_por destinatario_id', t: 'fecha_envio fecha_resolucion creado actualizado' }),
   auditoria_logs: def({ s: 'id codigo usuario_id usuario usuario_login rol accion modulo tabla registro_id registro_codigo descripcion nivel', f: 'empresa_id', t: 'fecha creado' }),
   auditoria_logs_cambios: def({ s: 'id log_id campo anterior nuevo' }),
   workflow_historial: def({ s: 'id empresa_id modulo registro_id registro_codigo desde hacia accion usuario_id usuario comentario', t: 'fecha' }),
@@ -112,6 +115,8 @@ async function fetchTable(name, { logs = false, order = 'id' } = {}) {
   const size = 1000;
   for (let from = 0; ; from += size) {
     const { data, error } = await supabase.from(name).select('*').order(order).range(from, from + size - 1);
+    // Módulo Operaciones aún sin instalar en la base (falta la migración 004): no debe romper el resto del ERP.
+    if (error && name.startsWith('ops_') && ['42P01', 'PGRST205'].includes(error.code)) return [];
     if (error) throw error;
     rows.push(...data);
     if (data.length < size) break;

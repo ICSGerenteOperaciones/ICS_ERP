@@ -56,6 +56,14 @@ export const SCHEMA = {
   actividades_tareas: {},
   actividades_tiempos: {},
 
+  // ---- Operaciones: sistemas → horas y revisiones ----
+  ops_sistemas: {
+    prefix: 'SIS',
+    details: { ops_horas: 'sistema_id', ops_revisiones: 'sistema_id' },
+  },
+  ops_horas: {},
+  ops_revisiones: {},
+
   // ---- Inventario (relacionado con Compras) ----
   articulos: { prefix: 'ART' },
   inventario: {
@@ -87,6 +95,7 @@ export const SCOPED_TABLES = new Set([
   'compras', 'compras_items', 'compras_entregas',
   'firmas', 'firmas_firmantes', 'firmas_adjuntos',
   'actividades', 'actividades_tareas', 'actividades_tiempos',
+  'ops_sistemas', 'ops_horas', 'ops_revisiones',
   'articulos', 'inventario', 'inventario_lineas',
   'auditoria_logs', 'workflow_historial',
 ]);

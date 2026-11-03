@@ -55,6 +55,9 @@ function load() {
           return { empresa_id: s?.empresa_id || EMPRESA_PRINCIPAL, empresas_ids: s?.empresas_ids || [EMPRESA_PRINCIPAL], ...u };
         });
       }
+      // Perfiles y usuarios del módulo Operaciones agregados después de guardar los datos de la demostración.
+      seed.roles.filter((r) => r.id.startsWith('rol-ops') && !parsed.roles.some((x) => x.id === r.id)).forEach((r) => parsed.roles.push(r));
+      seed.usuarios.filter((u) => u.id.startsWith('usr-ops') && !parsed.usuarios.some((x) => x.id === u.id)).forEach((u) => parsed.usuarios.push(u));
       parsed.roles = parsed.roles.map((r) => {
         const base = seed.roles.find((s) => s.id === r.id);
         return base ? { ...r, permisos: { ...base.permisos, ...r.permisos } } : r;
@@ -147,13 +150,14 @@ function nextCode(table) {
 const NO_LOG = new Set(['auditoria_logs', 'auditoria_logs_cambios', 'workflow_historial']);
 const IGNORED_FIELDS = new Set(['id', 'creado', 'actualizado', 'empresa_id']);
 const SECRET_FIELDS = new Set(['clave']);
-const MODULE_ALIAS = { articulos: 'inventario' };
+const MODULE_ALIAS = { articulos: 'inventario', ops_sistemas: 'operaciones', ops_horas: 'operaciones', ops_revisiones: 'operaciones' };
 const LABELS = {
   compras: 'orden de compra', compras_items: 'ítem de compra', compras_entregas: 'entrega',
   firmas: 'documento', firmas_firmantes: 'firmante', firmas_adjuntos: 'adjunto',
   actividades: 'actividad', actividades_tareas: 'tarea', actividades_tiempos: 'registro de tiempo',
   terceros: 'tercero', terceros_contactos: 'contacto', terceros_direcciones: 'dirección', terceros_cuentas: 'cuenta bancaria',
   inventario: 'movimiento de inventario', inventario_lineas: 'línea de movimiento', articulos: 'artículo',
+  ops_sistemas: 'sistema', ops_horas: 'registro de horas', ops_revisiones: 'revisión',
   usuarios: 'usuario', roles: 'rol',
 };
 const SYSTEM_ACTOR = { id: 'sistema', nombre: 'Sistema', usuario: 'sistema', rol: '—' };

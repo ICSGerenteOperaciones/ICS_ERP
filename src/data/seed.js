@@ -74,6 +74,11 @@ function buildEmpresa(empresa, opts) {
       id: 'rol-auditor', codigo: 'ROL-0005', nombre: 'Auditor interno', descripcion: 'Consulta el registro de auditoría (logs) del sistema',
       permisos: perms({ dashboard: 'ver', auditorias: 'ver', compras: 'ver', inventario: 'ver', firmas: 'ver', actividades: 'ver', terceros: 'ver' }),
     },
+    // Perfiles del módulo Operaciones (ver, crear = registrar horas / enviar a revisión, editar = gestionar, aprobar = revisar)
+    { id: 'rol-ops-consulta', codigo: 'ROL-OPS-01', nombre: 'Operaciones · Consulta', descripcion: 'Visualiza sistemas, etapas y horas', permisos: perms({ dashboard: 'ver', operaciones: 'ver' }) },
+    { id: 'rol-ops-dev', codigo: 'ROL-OPS-02', nombre: 'Operaciones · Desarrollador', descripcion: 'Consulta sus sistemas, registra horas y envía a revisión', permisos: perms({ dashboard: 'ver', operaciones: 'ver,crear' }) },
+    { id: 'rol-ops-qa', codigo: 'ROL-OPS-03', nombre: 'Operaciones · QA', descripcion: 'Consulta sistemas enviados a revisión y aprueba o rechaza', permisos: perms({ dashboard: 'ver', operaciones: 'ver,aprobar' }) },
+    { id: 'rol-ops-lider', codigo: 'ROL-OPS-04', nombre: 'Operaciones · Líder', descripcion: 'Revisa sistemas, aprueba o devuelve', permisos: perms({ dashboard: 'ver', operaciones: 'ver,crear,aprobar' }) },
   ];
 
   // ---------- Usuarios ----------
@@ -104,6 +109,11 @@ function buildEmpresa(empresa, opts) {
       email: 'rvargas@ics.demo', cargo: 'Auditor interno', rol_id: 'rol-auditor', activo: true, empresa_id: E.ics, empresas_ids: [E.ics, E.cloud],
       dashboards: ['auditorias', 'resumen'],
     },
+    { id: 'usr-ops-dev', codigo: 'USR-0006', usuario: 'dortiz', clave: 'Demo2026*', nombre: 'Daniel Ortiz', email: 'dortiz@ics.demo', cargo: 'Desarrollador', rol_id: 'rol-ops-dev', activo: true, empresa_id: E.ics, empresas_ids: [E.ics, E.cloud], dashboards: [] },
+    { id: 'usr-ops-dev2', codigo: 'USR-0007', usuario: 'vpardo', clave: 'Demo2026*', nombre: 'Valentina Pardo', email: 'vpardo@ics.demo', cargo: 'Desarrolladora', rol_id: 'rol-ops-dev', activo: true, empresa_id: E.ics, empresas_ids: [E.ics, E.cloud], dashboards: [] },
+    { id: 'usr-ops-qa', codigo: 'USR-0008', usuario: 'snavarro', clave: 'Demo2026*', nombre: 'Sofía Navarro', email: 'snavarro@ics.demo', cargo: 'Analista QA', rol_id: 'rol-ops-qa', activo: true, empresa_id: E.ics, empresas_ids: [E.ics, E.cloud], dashboards: [] },
+    { id: 'usr-ops-lider', codigo: 'USR-0009', usuario: 'mrios', clave: 'Demo2026*', nombre: 'Mateo Ríos', email: 'mrios@ics.demo', cargo: 'Líder de Innovación', rol_id: 'rol-ops-lider', activo: true, empresa_id: E.ics, empresas_ids: [E.ics, E.cloud], dashboards: [] },
+    { id: 'usr-ops-cons', codigo: 'USR-0010', usuario: 'jbermudez', clave: 'Demo2026*', nombre: 'Julián Bermúdez', email: 'jbermudez@ics.demo', cargo: 'Gerencia (consulta)', rol_id: 'rol-ops-consulta', activo: true, empresa_id: E.ics, empresas_ids: [E.ics, E.cloud], dashboards: [] },
   ];
 
   // ---------- Terceros (maestro) + contactos / direcciones / cuentas (detalle) ----------
@@ -416,10 +426,52 @@ function buildEmpresa(empresa, opts) {
   auditoria_logs.sort((a, b) => a.fecha.localeCompare(b.fecha));
   auditoria_logs.forEach((l, i) => (l.codigo = `LOG-${String(i + 1).padStart(4, '0')}`));
 
+  // ---------- Operaciones (solo empresa principal): sistemas → horas / revisiones ----------
+  const ops_sistemas = [];
+  const ops_horas = [];
+  const ops_revisiones = [];
+  if (opts.primary) {
+    const U = { dev: usuarios[5], dev2: usuarios[6], qa: usuarios[7], lider: usuarios[8] };
+    const defs = [
+      ['Portal de clientes', 'Portal web para consulta de estados de cuenta y solicitudes.', 'dev', 'DESARROLLO', 'ACTIVO', 'Alta', [3, 18, 4, 2]],
+      ['App de inspecciones', 'Aplicación móvil para inspecciones en campo con firma digital.', 'dev2', 'QA', 'ACTIVO', 'Alta', [6, 40, 12, 0]],
+      ['Tablero de indicadores', 'Tablero gerencial de indicadores operativos.', 'dev', 'ANALISIS', 'ACTIVO', 'Media', [10, 0, 0, 0]],
+      ['Integración contable', 'Conector entre el ERP y el software contable.', 'dev2', 'DESARROLLO', 'PAUSADO', 'Media', [8, 22, 0, 0]],
+      ['Gestor documental', 'Archivo digital con control de versiones.', 'dev', 'DESPLEGADO', 'CERRADO', 'Baja', [12, 56, 16, 6]],
+    ];
+    defs.forEach(([nombre, descripcion, dev, etapa, estado, prioridad, horas], i) => {
+      const s = {
+        id: id('sis'), codigo: `SIS-${String(i + 1).padStart(4, '0')}`, nombre, descripcion,
+        desarrollador_id: U[dev].id, coordinador_id: U.lider.id, qa_id: U.qa.id,
+        fecha_inicio: iso(2026, 5 + (i % 3), 2 + i).slice(0, 10), fecha_entrega: iso(2026, 10 + (i % 2), 10 + i * 3).slice(0, 10),
+        prioridad, etapa, estado, observaciones: estado === 'PAUSADO' ? 'En espera de credenciales del proveedor contable.' : '', creado: iso(2026, 5, 1 + i),
+      };
+      ops_sistemas.push(s);
+      ['ANALISIS', 'DESARROLLO', 'QA', 'DESPLEGADO'].forEach((et, k) => {
+        let rest = horas[k];
+        for (let n = 0; rest > 0; n++) {
+          const h = Math.min(rest, int(2, 8));
+          rest -= h;
+          ops_horas.push({
+            id: id('oh'), sistema_id: s.id, etapa: et, usuario_id: U[dev].id, usuario: U[dev].nombre,
+            fecha: iso(2026, 6 + k, 1 + ((n * 3 + i) % 27)).slice(0, 10), horas: h,
+            descripcion: ['Levantamiento de requerimientos', 'Construcción de módulos', 'Pruebas funcionales y correcciones', 'Despliegue y entrega'][k], creado: iso(2026, 6 + k, 1 + ((n * 3 + i) % 27)),
+          });
+        }
+      });
+    });
+    ops_revisiones.push({
+      id: id('or'), sistema_id: ops_sistemas[1].id, tipo: 'QA', enviado_por: U.dev2.id, enviado_por_nombre: U.dev2.nombre,
+      fecha_envio: iso(2026, 9, 28), comentario: 'Listo para pruebas de regresión.', destinatario_id: U.qa.id, estado: 'PENDIENTE',
+      resuelto_por: '', fecha_resolucion: '', motivo: '', creado: iso(2026, 9, 28),
+    });
+  }
+
   const tables = {
     roles, usuarios, terceros, terceros_contactos, terceros_direcciones, terceros_cuentas,
     compras, compras_items, compras_entregas, firmas, firmas_firmantes, firmas_adjuntos,
     actividades, actividades_tareas, actividades_tiempos,
+    ops_sistemas, ops_horas, ops_revisiones,
     articulos, inventario, inventario_lineas, auditoria_logs, auditoria_logs_cambios, workflow_historial,
   };
   // Cada registro de negocio pertenece a la empresa; los eventos de sesión/roles/usuarios son globales.

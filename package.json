@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "seed:supabase": "node scripts/seed-supabase.mjs",
-    "probar:seguridad": "node scripts/probar-seguridad.mjs"
+    "probar:seguridad": "node scripts/probar-seguridad.mjs",
+    "probar:operaciones": "node scripts/probar-operaciones.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
